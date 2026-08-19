@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Plano de Arquitetura BI: Video Games & Metacritic</title>
+    <style>
+        :root {
+            --primary: #1a365d;
+            --secondary: #2b6cb0;
+            --accent: #ed8936;
+            --bg: #f7fafc;
+            --text: #2d3748;
+            --border: #e2e8f0;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            line-height: 1.6;
+            color: var(--text);
+            background-color: var(--bg);
+            margin: 0;
+            padding: 0;
+        }
+        header {
+            background-color: var(--primary);
+            color: white;
+            padding: 2.5rem;
+            text-align: center;
+            border-bottom: 4px solid var(--accent);
+        }
+        header h1 {
+            margin: 0;
+            font-size: 2.2rem;
+        }
+        .container {
+            max-width: 1100px;
+            margin: 2rem auto;
+            padding: 0 2rem;
+        }
+        .card {
+            background: white;
+            border-radius: 8px;
+            padding: 2rem;
+            margin-bottom: 2rem;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+            border: 1px solid var(--border);
+        }
+        h2 {
+            color: var(--primary);
+            border-bottom: 2px solid var(--border);
+            padding-bottom: 0.5rem;
+            margin-top: 0;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        h3 {
+            color: var(--secondary);
+            margin-top: 1.5rem;
+        }
+        .flow-step {
+            display: flex;
+            background: #ebf8ff;
+            border-left: 4px solid var(--secondary);
+            padding: 1rem;
+            margin: 1rem 0;
+            border-radius: 0 8px 8px 0;
+        }
+        .flow-step strong {
+            color: var(--primary);
+            min-width: 120px;
+            display: inline-block;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 1.5rem 0;
+        }
+        th, td {
+            padding: 12px;
+            border: 1px solid var(--border);
+            text-align: left;
+        }
+        th {
+            background-color: var(--primary);
+            color: white;
+        }
+        tr:nth-child(even) {
+            background-color: #f8fafc;
+        }
+        ul {
+            padding-left: 1.5rem;
+        }
+        li {
+            margin-bottom: 0.5rem;
+        }
+        .tag {
+            background-color: var(--secondary);
+            color: white;
+            padding: 2px 8px;
+            border-radius: 12px;
+            font-size: 0.8rem;
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+
+    <header>
+        <h1>Arquitetura do Projeto: Sales & Metacritic</h1>
+        <p>Documentação de Fluxo (Python → PostgreSQL → Power BI)</p>
+    </header>
+
+    <div class="container">
+        
+        <div class="card">
+            <h2>1. Fluxo de Integração e Tratamento (Python)</h2>
+            <p>O Python atuará exclusivamente como a camada de ETL (Extração, Transformação e Carga), sem processamento visual. O objetivo é pegar os dados brutos e normalizá-los.</p>
+            
+            <h3>O que você vai precisar:</h3>
+            <ul>
+                <li><strong>Bibliotecas:</strong> <code>pandas</code> (para manipulação tabular) e <code>sqlalchemy</code> + <code>psycopg2</code> (para a conexão com o PostgreSQL).</li>
+                <li><strong>Ambiente:</strong> Seu script Python rodando para fazer a leitura do arquivo CSV.</li>
+            </ul>
+
+            <h3>O Fluxo Lógico (Passo a Passo):</h3>
+            <div class="flow-step">
+                <div><strong>1. Extração:</strong> Carregar o CSV contendo os 50k registros em um DataFrame Pandas.</div>
+            </div>
+            <div class="flow-step">
+                <div><strong>2. Limpeza:</strong> Identificar valores nulos (especialmente nas colunas de nota do Metacritic, já que jogos muito antigos não terão avaliações). Tratar esses nulos preenchendo com valores que não quebrem suas médias no futuro (ex: atribuir um identificador ou deixá-los vazios conscientemente).</div>
+            </div>
+            <div class="flow-step">
+                <div><strong>3. Separação:</strong> Extrair valores únicos para criar as Tabelas Dimensão. Você vai gerar DataFrames isolados apenas com os nomes únicos de Plataformas, Gêneros e Publicadoras, e gerar um ID (chave primária) para cada um.</div>
+            </div>
+            <div class="flow-step">
+                <div><strong>4. Cruzamento:</strong> Substituir os nomes em texto no DataFrame original (Tabela Fato) pelos IDs que você acabou de gerar nas Dimensões.</div>
+            </div>
+            <div class="flow-step">
+                <div><strong>5. Carga:</strong> Abrir a conexão com o banco e realizar o <em>insert</em> das Tabelas Dimensão e, por fim, da Tabela Fato no banco PostgreSQL.</div>
+            </div>
+        </div>
+
+        <div class="card">
+            <h2>2. Estrutura do Banco de Dados (PostgreSQL)</h2>
+            <p>O banco servirá como a fonte da verdade. Você pode gerenciar essa estrutura visualmente conectando um client (como DBeaver ou pgAdmin) ao seu servidor local do PostgreSQL.</p>
+            
+            <h3>O que você vai precisar:</h3>
+            <ul>
+                <li>O serviço do PostgreSQL rodando ativo no seu sistema (Linux ou Windows).</li>
+                <li>Um banco de dados criado (ex: <code>game_intelligence</code>).</li>
+            </ul>
+
+            <h3>Estrutura das Tabelas (Star Schema):</h3>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Tabela</th>
+                        <th>Tipo</th>
+                        <th>Colunas Essenciais</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td><strong>dim_plataforma</strong></td>
+                        <td>Dimensão</td>
+                        <td>ID da Plataforma (PK), Nome da Plataforma.</td>
+                    </tr>
+                    <tr>
+                        <td><strong>dim_publicadora</strong></td>
+                        <td>Dimensão</td>
+                        <td>ID da Publicadora (PK), Nome da Publicadora.</td>
+                    </tr>
+                    <tr>
+                        <td><strong>dim_genero</strong></td>
+                        <td>Dimensão</td>
+                        <td>ID do Gênero (PK), Nome do Gênero.</td>
+                    </tr>
+                    <tr>
+                        <td><strong>dim_jogo</strong></td>
+                        <td>Dimensão</td>
+                        <td>ID do Jogo (PK), Nome, ESRB Rating, Critic Score, User Score, GOTY (Verdadeiro/Falso), Monetização.</td>
+                    </tr>
+                    <tr>
+                        <td><strong>fato_vendas</strong></td>
+                        <td>Fato</td>
+                        <td>ID da Venda (PK), ID do Jogo (FK), ID da Plataforma (FK), ID do Gênero (FK), ID da Publicadora (FK), Ano de Lançamento, Vendas NA, Vendas EU, Vendas JP, Vendas Outros, Vendas Globais.</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+        <div class="card">
+            <h2>3. Camada Semântica e Visual (Power BI)</h2>
+            <p>Aqui é onde a análise acontece. O Power BI vai se conectar diretamente ao PostgreSQL para puxar os dados já limpos e estruturados.</p>
+
+            <h3>O que você vai precisar fazer:</h3>
+            <ul>
+                <li><strong>Conexão:</strong> Usar o conector de banco de dados PostgreSQL do Power BI Desktop.</li>
+                <li><strong>Power Query:</strong> Apenas validação final (conferir se os tipos de dados estão corretos: texto como texto, número decimal como número decimal).</li>
+                <li><strong>Modelagem:</strong> Na guia de Modelo, ligar o ID de cada Dimensão ao seu respectivo ID na Tabela Fato, formando o desenho de uma estrela. O filtro deve fluir das Dimensões para a Fato.</li>
+            </ul>
+
+            <h3>O que o Dashboard deve conter (Wireframe):</h3>
+            
+            <div style="margin-top: 1.5rem;">
+                <span class="tag">Página 1</span> <strong>Visão Macro e Mercado</strong>
+                <ul>
+                    <li>Filtros: Ano, Gênero e Plataforma.</li>
+                    <li>Cards principais: Faturamento Global, Total de Jogos, Nota Média da Crítica.</li>
+                    <li>Gráfico de linha mostrando a evolução temporal das vendas globais ano a ano.</li>
+                    <li>Gráfico de barras listando o ranking das publicadoras mais rentáveis.</li>
+                </ul>
+            </div>
+
+            <div style="margin-top: 1.5rem;">
+                <span class="tag">Página 2</span> <strong>Recepção Crítica vs. Desempenho</strong>
+                <ul>
+                    <li>Gráfico de dispersão cruzando a Nota do Metacritic (Eixo X) com o Volume de Vendas (Eixo Y).</li>
+                    <li>Gráfico de colunas comparando a diferença entre as notas dadas pelos Críticos e pelos Jogadores, quebrado por gênero do jogo.</li>
+                    <li>Matriz detalhada com os top jogos listando faturamento, se ganhou GOTY e o tipo de monetização.</li>
+                </ul>
+            </div>
+
+            <div style="margin-top: 1.5rem;">
+                <span class="tag">Página 3</span> <strong>Comportamento Regional</strong>
+                <ul>
+                    <li>Gráfico de anel mostrando o Market Share das vendas divididas pelo sistema ESRB (classificação etária).</li>
+                    <li>Gráfico de barras empilhadas demonstrando qual porcentagem das vendas de um determinado Gênero (ex: RPG) vem de qual região (América do Norte, Europa ou Japão).</li>
+                </ul>
+            </div>
+        </div>
+
+    </div>
+</body>
+</html>

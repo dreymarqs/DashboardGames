@@ -1,0 +1,312 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Arquitetura de BI: Video Game Sales & Metacritic</title>
+    <style>
+        :root {
+            --primary-color: #2c3e50;
+            --secondary-color: #34495e;
+            --accent-color: #3498db;
+            --bg-color: #f8f9fa;
+            --text-color: #333;
+            --border-color: #e0e0e0;
+        }
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            line-height: 1.6;
+            color: var(--text-color);
+            background-color: var(--bg-color);
+            margin: 0;
+            padding: 0;
+        }
+        header {
+            background-color: var(--primary-color);
+            color: white;
+            padding: 2rem;
+            text-align: center;
+            border-bottom: 5px solid var(--accent-color);
+        }
+        header h1 {
+            margin: 0;
+            font-size: 2.5rem;
+        }
+        header p {
+            margin: 10px 0 0;
+            font-size: 1.2rem;
+            opacity: 0.9;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 2rem auto;
+            padding: 0 2rem;
+        }
+        .section {
+            background: white;
+            border-radius: 8px;
+            padding: 2rem;
+            margin-bottom: 2rem;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.05);
+        }
+        h2 {
+            color: var(--primary-color);
+            border-bottom: 2px solid var(--border-color);
+            padding-bottom: 0.5rem;
+            margin-top: 0;
+        }
+        h3 {
+            color: var(--secondary-color);
+            margin-top: 1.5rem;
+        }
+        pre {
+            background-color: #2b2b2b;
+            color: #f8f8f2;
+            padding: 1.5rem;
+            border-radius: 6px;
+            overflow-x: auto;
+            font-family: 'Consolas', 'Monaco', monospace;
+            font-size: 0.9rem;
+            border-left: 4px solid var(--accent-color);
+        }
+        code {
+            font-family: 'Consolas', 'Monaco', monospace;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 1.5rem 0;
+        }
+        th, td {
+            padding: 12px;
+            border: 1px solid var(--border-color);
+            text-align: left;
+        }
+        th {
+            background-color: var(--primary-color);
+            color: white;
+        }
+        tr:nth-child(even) {
+            background-color: #f2f2f2;
+        }
+        .step-box {
+            background-color: #e8f4f8;
+            border-left: 4px solid var(--accent-color);
+            padding: 1rem;
+            margin: 1rem 0;
+            border-radius: 0 4px 4px 0;
+        }
+        ul, ol {
+            padding-left: 1.5rem;
+        }
+        li {
+            margin-bottom: 0.5rem;
+        }
+    </style>
+</head>
+<body>
+
+    <header>
+        <h1>Arquitetura de Dados e BI</h1>
+        <p>Dashboard de Video Game Sales & Metacritic Intelligence</p>
+    </header>
+
+    <div class="container">
+        
+        <!-- SEÇÃO 1: PYTHON -->
+        <div class="section">
+            <h2>1. Fluxo de Processamento (ETL com Python)</h2>
+            <p>O fluxo de dados usará Python (com as bibliotecas <code>pandas</code> e <code>sqlalchemy</code>) para ler o CSV bruto, tratar as inconsistências e inserir os dados de forma normalizada em um banco de dados PostgreSQL.</p>
+            
+            <div class="step-box">
+                <strong>Objetivos do Script:</strong>
+                <ul>
+                    <li>Separar o tabelão (desnormalizado) em um <strong>Star Schema</strong>.</li>
+                    <li>Tratar valores nulos (ex: jogos sem nota no Metacritic).</li>
+                    <li>Criar IDs únicos para as tabelas dimensão.</li>
+                    <li>Carregar os dados via engine do SQLAlchemy para o PostgreSQL.</li>
+                </ul>
+            </div>
+
+            <h3>Exemplo de Script Python (Pipeline ETL)</h3>
+<pre><code>import pandas as pd
+from sqlalchemy import create_engine
+
+# 1. Extração (Extract)
+df_raw = pd.read_csv('video_game_sales_metacritic.csv')
+
+# 2. Transformação (Transform)
+# Removendo ou tratando nulos
+df_raw['Critic_Score'].fillna(-1, inplace=True) # -1 indica "Sem Avaliação"
+df_raw['User_Score'].fillna(-1, inplace=True)
+df_raw['Year_of_Release'].fillna(1900, inplace=True)
+
+# Criando as Dimensões (Valores únicos)
+dim_plataforma = pd.DataFrame(df_raw['Platform'].unique(), columns=['nome_plataforma']).reset_index()
+dim_plataforma.rename(columns={'index': 'id_plataforma'}, inplace=True)
+
+dim_publicadora = pd.DataFrame(df_raw['Publisher'].dropna().unique(), columns=['nome_publicadora']).reset_index()
+dim_publicadora.rename(columns={'index': 'id_publicadora'}, inplace=True)
+
+dim_genero = pd.DataFrame(df_raw['Genre'].dropna().unique(), columns=['nome_genero']).reset_index()
+dim_genero.rename(columns={'index': 'id_genero'}, inplace=True)
+
+# Mapeando os IDs de volta para criar a Tabela Fato
+df_raw = df_raw.merge(dim_plataforma, left_on='Platform', right_on='nome_plataforma', how='left')
+df_raw = df_raw.merge(dim_publicadora, left_on='Publisher', right_on='nome_publicadora', how='left')
+df_raw = df_raw.merge(dim_genero, left_on='Genre', right_on='nome_genero', how='left')
+
+# Criando a Dimensão Jogo
+dim_jogo = df_raw[['Name', 'ESRB_Rating', 'Critic_Score', 'User_Score', 'Monetization', 'GOTY']].drop_duplicates().reset_index(drop=True)
+dim_jogo.reset_index(inplace=True)
+dim_jogo.rename(columns={'index': 'id_jogo'}, inplace=True)
+
+# Tabela Fato
+df_raw = df_raw.merge(dim_jogo, on=['Name', 'ESRB_Rating'], how='left')
+fato_vendas = df_raw[['id_jogo', 'id_plataforma', 'id_publicadora', 'id_genero', 'Year_of_Release', 
+                      'NA_Sales', 'EU_Sales', 'JP_Sales', 'Other_Sales', 'Global_Sales']]
+
+# 3. Carga (Load) - Conectando ao PostgreSQL
+engine = create_engine('postgresql://usuario:senha@localhost:5432/game_intelligence')
+
+# Inserindo tabelas no banco
+dim_plataforma.to_sql('dim_plataforma', engine, if_exists='replace', index=False)
+dim_publicadora.to_sql('dim_publicadora', engine, if_exists='replace', index=False)
+dim_genero.to_sql('dim_genero', engine, if_exists='replace', index=False)
+dim_jogo.to_sql('dim_jogo', engine, if_exists='replace', index=False)
+fato_vendas.to_sql('fato_vendas', engine, if_exists='replace', index=False)
+
+print("ETL concluído com sucesso!")</code></pre>
+        </div>
+
+        <!-- SEÇÃO 2: SQL -->
+        <div class="section">
+            <h2>2. Modelagem do Banco de Dados (PostgreSQL)</h2>
+            <p>Os dados serão armazenados em uma estrutura de Star Schema otimizada para consultas analíticas pesadas. Caso precise criar as tabelas manualmente antes do insert, aqui está o DDL.</p>
+
+<pre><code>-- Criação das Tabelas Dimensão
+CREATE TABLE dim_plataforma (
+    id_plataforma INT PRIMARY KEY,
+    nome_plataforma VARCHAR(50)
+);
+
+CREATE TABLE dim_publicadora (
+    id_publicadora INT PRIMARY KEY,
+    nome_publicadora VARCHAR(150)
+);
+
+CREATE TABLE dim_genero (
+    id_genero INT PRIMARY KEY,
+    nome_genero VARCHAR(50)
+);
+
+CREATE TABLE dim_jogo (
+    id_jogo INT PRIMARY KEY,
+    name VARCHAR(255),
+    esrb_rating VARCHAR(10),
+    critic_score DECIMAL(5,2),
+    user_score DECIMAL(5,2),
+    monetization VARCHAR(50),
+    goty BOOLEAN
+);
+
+-- Criação da Tabela Fato
+CREATE TABLE fato_vendas (
+    id_venda SERIAL PRIMARY KEY,
+    id_jogo INT REFERENCES dim_jogo(id_jogo),
+    id_plataforma INT REFERENCES dim_plataforma(id_plataforma),
+    id_publicadora INT REFERENCES dim_publicadora(id_publicadora),
+    id_genero INT REFERENCES dim_genero(id_genero),
+    year_of_release INT,
+    na_sales DECIMAL(10,2),
+    eu_sales DECIMAL(10,2),
+    jp_sales DECIMAL(10,2),
+    other_sales DECIMAL(10,2),
+    global_sales DECIMAL(10,2)
+);</code></pre>
+        </div>
+
+        <!-- SEÇÃO 3: POWER BI -->
+        <div class="section">
+            <h2>3. Importação e Estrutura no Power BI</h2>
+            <p>Após a ingestão no PostgreSQL, a conexão com o Power BI será direta. O ambiente deve ser configurado seguindo as melhores práticas de modelagem analítica.</p>
+            
+            <table>
+                <thead>
+                    <tr>
+                        <th>Etapa</th>
+                        <th>Ação no Power BI / Power Query</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td><strong>Conexão</strong></td>
+                        <td>Obter Dados > Banco de Dados PostgreSQL. Escolher o modo "Importar" (ou DirectQuery, dependendo da necessidade de atualização em tempo real).</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Relacionamentos</strong></td>
+                        <td>Na guia de Modelo, garanta que <code>fato_vendas</code> está no centro (esquema estrela). Crie relacionamentos 1:N entre as chaves primárias das dimensões e as chaves estrangeiras da Fato. O sentido do filtro deve ser ÚNICO (da Dimensão para a Fato).</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Medidas DAX Essenciais</strong></td>
+                        <td>
+                            Criar uma tabela vazia chamada <code>_Medidas</code> para organizar:
+                            <ul>
+                                <li><code>Total Receita Global = SUM(fato_vendas[global_sales])</code></li>
+                                <li><code>Share Japão = SUM(fato_vendas[jp_sales]) / [Total Receita Global]</code></li>
+                                <li><code>Score Médio Crítica = CALCULATE(AVERAGE(dim_jogo[critic_score]), dim_jogo[critic_score] &gt; 0)</code></li>
+                            </ul>
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+        <!-- SEÇÃO 4: DASHBOARDS -->
+        <div class="section">
+            <h2>4. Estrutura do Dashboard (Telas / Views)</h2>
+            <p>Para manter a legibilidade com 50k registros, o dashboard será dividido em 3 páginas principais, cada uma focada em responder um conjunto de perguntas de negócio específicas.</p>
+
+            <h3>Página 1: Visão Executiva Macro (O C-Level)</h3>
+            <p>Foco em volume financeiro, market share e desempenho ao longo do tempo.</p>
+            <ul>
+                <li><strong>Filtros Globais (Slicers):</strong> Ano de Lançamento (Slider), Geração da Plataforma, Gênero.</li>
+                <li><strong>KPI Cards (Topo):</strong> Total de Vendas Globais, Volume Total de Jogos, Média de Avaliação.</li>
+                <li><strong>Gráfico de Área / Linhas:</strong> Vendas Globais ao longo do tempo (Eixo X: Ano). Permite ver o crescimento e a sazonalidade da indústria.</li>
+                <li><strong>Gráfico de Barras Horizontal:</strong> Top 10 Publicadoras por Venda Global (ex: Nintendo, EA, Activision).</li>
+                <li><strong>Gráfico de Cascata (Waterfall):</strong> Quebra de receita por região (NA, EU, JP, Other).</li>
+            </ul>
+
+            <h3>Página 2: Qualidade vs. Receita (A Visão Crítica)</h3>
+            <p>Cruza as pontuações do Metacritic com a performance de vendas.</p>
+            <ul>
+                <li><strong>Gráfico de Dispersão (Scatter Plot):</strong> 
+                    <ul>
+                        <li>Eixo X: Nota Metacritic (Critic Score)</li>
+                        <li>Eixo Y: Vendas Globais</li>
+                        <li>Tamanho da Bolha: Vendas (para ênfase)</li>
+                        <li>Cor: Gênero ou Publicadora</li>
+                    </ul>
+                    <em>*Insight esperado: Jogos acima de 85 tendem a ter um "long tail" de vendas muito maior.</em>
+                </li>
+                <li><strong>Gráfico de Colunas Agrupadas:</strong> Comparação das médias de <em>Critic Score</em> vs <em>User Score</em> por Gênero. Onde há mais discrepância?</li>
+                <li><strong>Tabela de Matriz:</strong> Top 20 Jogos Individuais, mostrando Vendas, GOTY (flag) e Scores (com formatação condicional: verde para >85, vermelho para <60).</li>
+            </ul>
+
+            <h3>Página 3: Análise Demográfica e Regional</h3>
+            <p>Foco na distribuição ESRB e como o consumo varia geograficamente.</p>
+            <ul>
+                <li><strong>Gráfico de Barras 100% Empilhadas:</strong> 
+                    <ul>
+                        <li>Eixo Y: Gêneros (RPG, Shooter, Sports, etc.)</li>
+                        <li>Valores: % de Vendas na América do Norte, Europa e Japão.</li>
+                    </ul>
+                    <em>*Insight esperado: RPGs dominam fortemente o mercado japonês, enquanto Shooters dominam o norte-americano.</em>
+                </li>
+                <li><strong>Gráfico de Anel (Donut Chart):</strong> Distribuição de Receita por Classificação Etária (ESRB - M, T, E, etc.).</li>
+                <li><strong>Gráfico de Faixas (Ribbon Chart):</strong> Evolução do Market Share das Plataformas ao longo das décadas.</li>
+            </ul>
+        </div>
+    </div>
+</body>
+</html>
